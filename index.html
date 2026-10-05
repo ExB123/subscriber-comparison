@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Сравнение подписчиков</title>
+<style>
+*{box-sizing:border-box}
+:root{
+  --bg:#0f1117;--card:#171a23;--card2:#1d212c;--border:#2b3140;
+  --text:#f4f6fa;--muted:#9da6b8;--accent:#6c7cff;
+  --green:#38d996;--red:#ff6174;
+}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+}
+.container{max-width:1050px;margin:auto;padding:28px 18px 50px}
+h1{margin:0;font-size:30px;letter-spacing:-.5px}
+.subtitle{color:var(--muted);margin:8px 0 25px}
+.uploads{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.card{
+  background:var(--card);border:1px solid var(--border);border-radius:18px;
+  padding:20px;
+}
+.card h2{font-size:19px;margin:0 0 14px}
+.drop{
+  min-height:150px;border:2px dashed #3a4253;border-radius:14px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:18px;cursor:pointer;transition:.2s;
+}
+.drop:hover,.drop.drag{border-color:var(--accent);background:#191d29}
+.fileName{margin-top:12px;font-weight:600;word-break:break-word}
+.fileInfo{color:var(--muted);font-size:13px;margin-top:5px}
+input[type=file]{display:none}
+.btn{
+  width:100%;margin-top:18px;border:0;border-radius:13px;padding:15px;
+  background:var(--accent);color:white;font-size:16px;font-weight:700;cursor:pointer;
+}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px}
+.stat{background:var(--card2);border:1px solid var(--border);border-radius:15px;padding:17px}
+.stat .num{font-size:28px;font-weight:800;margin-top:5px}
+.stat .label{color:var(--muted);font-size:13px}
+.results{margin-top:18px;display:none}
+.resultTabs{display:flex;gap:10px;margin-bottom:12px}
+.tab{
+  flex:1;padding:12px;border-radius:12px;border:1px solid var(--border);
+  background:var(--card);color:var(--muted);font-weight:700;cursor:pointer
+}
+.tab.active.green{border-color:var(--green);color:var(--green)}
+.tab.active.red{border-color:var(--red);color:var(--red)}
+.list{
+  background:var(--card);border:1px solid var(--border);border-radius:16px;
+  overflow:hidden
+}
+.search{
+  width:100%;padding:14px 16px;background:var(--card2);color:white;
+  border:0;border-bottom:1px solid var(--border);outline:none;font-size:15px
+}
+.row{
+  display:grid;grid-template-columns:70px 1fr 1fr 1fr;gap:12px;
+  padding:12px 15px;border-bottom:1px solid #252a35;align-items:center
+}
+.row.header{color:var(--muted);font-size:12px;font-weight:700}
+.row:last-child{border-bottom:0}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+.empty{padding:35px;text-align:center;color:var(--muted)}
+.error{
+  display:none;background:#321b21;border:1px solid #71303c;color:#ffb4be;
+  border-radius:12px;padding:13px;margin-top:15px
+}
+.note{color:var(--muted);font-size:12px;margin-top:15px;line-height:1.5}
+@media(max-width:700px){
+  .container{padding:20px 12px 35px}
+  h1{font-size:25px}
+  .uploads{grid-template-columns:1fr}
+  .stats{grid-template-columns:1fr 1fr}
+  .stats .stat:last-child{grid-column:1/-1}
+  .row{grid-template-columns:55px 1fr;gap:4px 10px}
+  .row.header{display:none}
+  .row>div:nth-child(3),.row>div:nth-child(4){grid-column:2}
+  .row>div:nth-child(3)::before{content:"Имя: ";color:var(--muted)}
+  .row>div:nth-child(4)::before{content:"Username: ";color:var(--muted)}
+}
+</style>
+
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0f1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Сравнение подписчиков">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+</head>
+<body>
+<div class="container">
+  <h1>📊 Сравнение подписчиков</h1>
+  <div class="subtitle">Загрузите старый и новый CSV — приложение покажет, кто появился и кто исчез.</div>
+    <div id="installBox" style="display:none;margin:0 0 18px;background:#171a23;border:1px solid #2b3140;border-radius:14px;padding:13px 15px">
+      <div style="font-weight:700;margin-bottom:5px">📱 Установить на устройство</div>
+      <div style="color:#9da6b8;font-size:13px;line-height:1.45">
+        На iPhone откройте сайт в Safari → «Поделиться» → «На экран Домой».
+        На ПК Chrome/Edge может предложить установить приложение.
+      </div>
+    </div>
+
+  <div class="uploads">
+    <div class="card">
+      <h2>📁 Старый файл</h2>
+      <label class="drop" id="oldDrop" for="oldFile">
+        <div style="font-size:32px">⬆️</div>
+        <b>Выбрать CSV-файл</b>
+        <span class="fileInfo">Можно также перетащить файл сюда</span>
+        <span class="fileName" id="oldName">Файл не выбран</span>
+      </label>
+      <input id="oldFile" type="file" accept=".csv,text/csv">
+    </div>
+
+    <div class="card">
+      <h2>📁 Новый файл</h2>
+      <label class="drop" id="newDrop" for="newFile">
+        <div style="font-size:32px">⬆️</div>
+        <b>Выбрать CSV-файл</b>
+        <span class="fileInfo">Можно также перетащить файл сюда</span>
+        <span class="fileName" id="newName">Файл не выбран</span>
+      </label>
+      <input id="newFile" type="file" accept=".csv,text/csv">
+    </div>
+  </div>
+
+  <button class="btn" id="compare" disabled>🔍 Сравнить файлы</button>
+  <div class="error" id="error"></div>
+
+  <div class="results" id="results">
+    <div class="stats">
+      <div class="stat"><div class="label">Старый файл</div><div class="num" id="oldCount">0</div></div>
+      <div class="stat"><div class="label">Новый файл</div><div class="num" id="newCount">0</div></div>
+      <div class="stat"><div class="label">Общее изменение</div><div class="num" id="totalChange">0</div></div>
+    </div>
+
+    <div class="resultTabs" style="margin-top:18px">
+      <button class="tab active green" id="addedTab">🟢 Прибавились: 0</button>
+      <button class="tab red" id="removedTab">🔴 Убавились: 0</button>
+    </div>
+
+    <div class="list">
+      <input class="search" id="search" placeholder="Поиск по ID, username или имени...">
+      <div class="row header"><div>№</div><div>ID</div><div>Имя</div><div>Username</div></div>
+      <div id="listBody"></div>
+    </div>
+
+    <div class="note">
+      Сравнение выполняется по <b>ID пользователя</b>. Файлы обрабатываются прямо в браузере и не отправляются на сервер.
+    </div>
+  </div>
+</div>
+
+<script>
+let oldFile=null,newFile=null,added=[],removed=[],current="added";
+
+const $=id=>document.getElementById(id);
+
+function setupInput(inputId,nameId,dropId,which){
+  const input=$(inputId), drop=$(dropId);
+  input.addEventListener("change",()=>{
+    if(input.files[0]) setFile(input.files[0],nameId,which);
+  });
+  ["dragenter","dragover"].forEach(e=>drop.addEventListener(e,ev=>{
+    ev.preventDefault();drop.classList.add("drag");
+  }));
+  ["dragleave","drop"].forEach(e=>drop.addEventListener(e,ev=>{
+    ev.preventDefault();drop.classList.remove("drag");
+  }));
+  drop.addEventListener("drop",ev=>{
+    const f=ev.dataTransfer.files[0];
+    if(f){setFile(f,nameId,which);}
+  });
+}
+function setFile(file,nameId,which){
+  if(!file.name.toLowerCase().endsWith(".csv")){
+    showError("Нужен файл в формате CSV.");return;
+  }
+  if(which==="old")oldFile=file;else newFile=file;
+  $(nameId).textContent=file.name;
+  $(nameId).nextElementSibling?.remove?.();
+  $("compare").disabled=!(oldFile&&newFile);
+  hideError();
+}
+setupInput("oldFile","oldName","oldDrop","old");
+setupInput("newFile","newName","newDrop","new");
+
+function detectDelimiter(text){
+  const first=text.split(/\r?\n/).find(x=>x.trim());
+  const candidates=[",",";","\\t"];
+  let best=",",max=-1;
+  for(const d of candidates){
+    const n=first.split(d==="\\t"?"\\t":d).length;
+    if(n>max){max=n;best=d==="\\t"?"\\t":d;}
+  }
+  return best;
+}
+function parseCSV(text){
+  text=text.replace(/^\uFEFF/,"");
+  const delimiter=detectDelimiter(text);
+  const rows=[];let row=[],cell="",quote=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i],next=text[i+1];
+    if(c==='"'){
+      if(quote&&next==='"'){cell+='"';i++}
+      else quote=!quote;
+    }else if(c===delimiter&&!quote){row.push(cell);cell=""}
+    else if((c==="\n"||c==="\r")&&!quote){
+      if(c==="\r"&&next==="\n")i++;
+      row.push(cell);cell="";
+      if(row.some(x=>x.trim()!==""))rows.push(row);
+      row=[];
+    }else cell+=c;
+  }
+  if(cell!==""||row.length){row.push(cell);rows.push(row)}
+  return rows;
+}
+function norm(s){return String(s??"").trim().toLowerCase().replace(/^["']|["']$/g,"");}
+function findCol(headers,patterns){
+  for(let i=0;i<headers.length;i++){
+    const h=norm(headers[i]);
+    if(patterns.some(p=>h===p||h.includes(p)))return i;
+  }
+  return -1;
+}
+function parseUsers(text){
+  const rows=parseCSV(text);
+  if(rows.length<2)throw new Error("CSV-файл пустой или не содержит строк с подписчиками.");
+  const headers=rows[0];
+  let idCol=findCol(headers,["id пользователя","user id","userid","id"]);
+  const usernameCol=findCol(headers,["имя пользователя","username","user name"]);
+  const fullCol=findCol(headers,["полное имя","full name","name"]);
+  if(idCol<0) {
+    // Запасной вариант: используем username, если ID отсутствует.
+    if(usernameCol<0)throw new Error("Не найден столбец с ID пользователя или именем пользователя.");
+    idCol=usernameCol;
+  }
+  const map=new Map();
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i]; if(!r.length)continue;
+    const id=norm(r[idCol]);
+    if(!id)continue;
+    map.set(id,{
+      id:r[idCol]||"",
+      username:usernameCol>=0?(r[usernameCol]||""):"",
+      name:fullCol>=0?(r[fullCol]||""):""
+    });
+  }
+  return map;
+}
+async function readFile(file){
+  const buf=await file.arrayBuffer();
+  // UTF-8 с автоматическим fallback на Windows-1251 для русских CSV.
+  let text;
+  try{text=new TextDecoder("utf-8",{fatal:true}).decode(buf)}
+  catch{text=new TextDecoder("windows-1251").decode(buf)}
+  return text;
+}
+$("compare").addEventListener("click",async()=>{
+  hideError();
+  try{
+    const [ot,nt]=await Promise.all([readFile(oldFile),readFile(newFile)]);
+    const oldMap=parseUsers(ot),newMap=parseUsers(nt);
+    added=[];removed=[];
+    for(const [id,u] of newMap)if(!oldMap.has(id))added.push(u);
+    for(const [id,u] of oldMap)if(!newMap.has(id))removed.push(u);
+    added.sort((a,b)=>norm(a.username||a.name).localeCompare(norm(b.username||b.name)));
+    removed.sort((a,b)=>norm(a.username||a.name).localeCompare(norm(b.username||b.name)));
+    $("oldCount").textContent=oldMap.size.toLocaleString("ru-RU");
+    $("newCount").textContent=newMap.size.toLocaleString("ru-RU");
+    const diff=newMap.size-oldMap.size;
+    $("totalChange").textContent=(diff>0?"+":"")+diff;
+    $("addedTab").textContent="🟢 Прибавились: "+added.length;
+    $("removedTab").textContent="🔴 Убавились: "+removed.length;
+    current="added";$("addedTab").classList.add("active");$("removedTab").classList.remove("active");
+    $("results").style.display="block";
+    render();
+  }catch(e){showError(e.message||"Не удалось обработать CSV.");}
+});
+$("addedTab").onclick=()=>{current="added";$("addedTab").classList.add("active");$("removedTab").classList.remove("active");render()};
+$("removedTab").onclick=()=>{current="removed";$("removedTab").classList.add("active");$("addedTab").classList.remove("active");render()};
+$("search").addEventListener("input",render);
+
+function render(){
+  const data=current==="added"?added:removed;
+  const q=norm($("search").value);
+  const filtered=data.filter(u=>
+    norm(u.id).includes(q)||norm(u.username).includes(q)||norm(u.name).includes(q)
+  );
+  if(!filtered.length){
+    $("listBody").innerHTML='<div class="empty">'+(data.length?"Ничего не найдено.":"Различий не обнаружено.")+"</div>";
+    return;
+  }
+  $("listBody").innerHTML=filtered.map((u,i)=>`
+    <div class="row">
+      <div class="mono">${i+1}</div>
+      <div class="mono">${esc(u.id)}</div>
+      <div>${esc(u.name)||"—"}</div>
+      <div>${esc(u.username)||"—"}</div>
+    </div>`).join("");
+}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
+function showError(t){$("error").textContent=t;$("error").style.display="block"}
+function hideError(){$("error").style.display="none"}
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+}
+</script>
+</body>
+</html>

@@ -87,6 +87,32 @@ input[type=file]{display:none}
   .row>div:nth-child(3)::before{content:"Имя: ";color:var(--muted)}
   .row>div:nth-child(4)::before{content:"Username: ";color:var(--muted)}
 }
+
+/* Локальная библиотека и история */
+.sideActions{position:fixed;left:14px;top:50%;transform:translateY(-50%);z-index:20;display:flex;flex-direction:column;gap:9px}
+.sideBtn{border:1px solid var(--border);background:var(--card);color:var(--text);padding:12px 14px;border-radius:13px;cursor:pointer;font-weight:700;box-shadow:0 8px 24px #0004}
+.sideBtn:hover{border-color:var(--accent)}
+.overlay{position:fixed;inset:0;background:#05070bd9;z-index:50;display:none;align-items:center;justify-content:center;padding:18px}
+.modal{width:min(900px,100%);max-height:85vh;overflow:auto;background:var(--card);border:1px solid var(--border);border-radius:18px;padding:20px;box-shadow:0 20px 80px #0008}
+.modalHead{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}
+.modalHead h2{margin:0;font-size:21px}
+.closeBtn{border:1px solid var(--border);background:var(--card2);color:var(--text);border-radius:10px;padding:8px 12px;cursor:pointer}
+.fileColumns{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.fileColumn{background:var(--card2);border:1px solid var(--border);border-radius:13px;padding:12px;min-width:0}
+.fileColumn h3{margin:0 0 10px;font-size:15px}
+.savedItem,.historyItem{border:1px solid var(--border);background:var(--card);border-radius:10px;padding:11px;margin-top:8px;overflow-wrap:anywhere}
+.savedItem{cursor:pointer}
+.savedItem:hover,.historyItem:hover{border-color:var(--accent)}
+.itemName{font-weight:650;font-size:13px}
+.itemMeta{color:var(--muted);font-size:12px;margin-top:5px}
+.smallActions{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.smallBtn{border:1px solid var(--border);background:#282e3d;color:var(--text);border-radius:8px;padding:7px 9px;cursor:pointer;font-size:12px}
+.smallBtn.danger{color:#ff9aa7}
+.modalEmpty{color:var(--muted);padding:18px 5px;text-align:center;font-size:13px}
+.historyItem{cursor:pointer}
+.modalNote{color:var(--muted);font-size:12px;line-height:1.45;margin-top:13px}
+@media(max-width:700px){.sideActions{top:auto;bottom:12px;left:10px;right:10px;transform:none;flex-direction:row}.sideBtn{flex:1;padding:11px 7px}.fileColumns{grid-template-columns:1fr}.modal{padding:14px;max-height:82vh}.overlay{padding:10px}}
+
 </style>
 
 <link rel="manifest" href="manifest.webmanifest">
@@ -98,6 +124,36 @@ input[type=file]{display:none}
 <meta name="mobile-web-app-capable" content="yes">
 </head>
 <body>
+
+  <div class="sideActions">
+    <button class="sideBtn" id="filesOpen">📁 Файлы</button>
+    <button class="sideBtn" id="historyOpen">🕘 История</button>
+  </div>
+  <div class="overlay" id="filesOverlay" role="dialog" aria-modal="true" aria-label="Локальные файлы">
+    <div class="modal">
+      <div class="modalHead"><h2>📁 Сохранённые файлы</h2><button class="closeBtn" data-close="filesOverlay">✕</button></div>
+      <div class="fileColumns">
+        <div class="fileColumn"><h3>Старые файлы</h3><div id="savedOldList"></div></div>
+        <div class="fileColumn"><h3>Новые файлы</h3><div id="savedNewList"></div></div>
+      </div>
+      <div class="modalNote">Файлы хранятся только в этом браузере на этом устройстве. Нажмите на файл, чтобы выбрать, в какой слот сравнения его вставить.</div>
+    </div>
+  </div>
+  <div class="overlay" id="fileChoiceOverlay" role="dialog" aria-modal="true" aria-label="Использовать файл">
+    <div class="modal" style="max-width:420px">
+      <div class="modalHead"><h2 id="fileChoiceTitle">Использовать файл</h2><button class="closeBtn" data-close="fileChoiceOverlay">✕</button></div>
+      <p style="color:var(--muted);font-size:14px">Куда вставить выбранный CSV?</p>
+      <div class="smallActions"><button class="btn" style="margin:0" id="useAsOld">Вставить в старые файлы</button><button class="btn" style="margin:0" id="useAsNew">Вставить в новые файлы</button></div>
+    </div>
+  </div>
+  <div class="overlay" id="historyOverlay" role="dialog" aria-modal="true" aria-label="История сравнений">
+    <div class="modal">
+      <div class="modalHead"><h2>🕘 История сравнений</h2><button class="closeBtn" data-close="historyOverlay">✕</button></div>
+      <div id="historyList"></div>
+      <div class="modalNote">История и результаты сохраняются локально в этом браузере. Откройте запись, чтобы снова посмотреть результат сравнения.</div>
+    </div>
+  </div>
+
 <div class="container">
   <h1>📊 Сравнение подписчиков</h1>
   <div class="subtitle">Загрузите старый и новый CSV — приложение покажет, кто появился и кто исчез.</div>
@@ -161,7 +217,85 @@ input[type=file]{display:none}
 </div>
 
 <script>
+
 let oldFile=null,newFile=null,added=[],removed=[],current="added";
+let savedFiles=[],selectedSavedFile=null,currentOldUsers=[],currentNewUsers=[];
+const DB_NAME="subscriber-comparison-local", DB_VERSION=1;
+function openLocalDB(){
+  return new Promise((resolve,reject)=>{
+    const request=indexedDB.open(DB_NAME,DB_VERSION);
+    request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains("files"))db.createObjectStore("files",{keyPath:"id"});if(!db.objectStoreNames.contains("history"))db.createObjectStore("history",{keyPath:"id"});};
+    request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);
+  });
+}
+async function dbAll(storeName){
+  const db=await openLocalDB();return new Promise((resolve,reject)=>{const tx=db.transaction(storeName,"readonly"),req=tx.objectStore(storeName).getAll();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);tx.oncomplete=()=>db.close();});
+}
+async function dbPut(storeName,value){
+  const db=await openLocalDB();return new Promise((resolve,reject)=>{const tx=db.transaction(storeName,"readwrite");tx.objectStore(storeName).put(value);tx.oncomplete=()=>{db.close();resolve(true)};tx.onerror=()=>{db.close();reject(tx.error)};});
+}
+async function dbDelete(storeName,id){
+  const db=await openLocalDB();return new Promise((resolve,reject)=>{const tx=db.transaction(storeName,"readwrite");tx.objectStore(storeName).delete(id);tx.oncomplete=()=>{db.close();resolve(true)};tx.onerror=()=>{db.close();reject(tx.error)};});
+}
+function makeId(){return Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,9)}
+function openModal(id){$(id).style.display="flex"}
+function closeModal(id){$(id).style.display="none"}
+document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>closeModal(b.dataset.close)));
+document.querySelectorAll(".overlay").forEach(o=>o.addEventListener("click",e=>{if(e.target===o)o.style.display="none"}));
+$("filesOpen").onclick=async()=>{await renderSavedFiles();openModal("filesOverlay")};
+$("historyOpen").onclick=async()=>{await renderHistory();openModal("historyOverlay")};
+async function saveUploadedFile(file,which){
+  try{
+    const content=await readFile(file);
+    const prior=savedFiles.find(x=>x.name===file.name&&x.role===which&&x.content===content);
+    if(prior){prior.lastUsed=Date.now();await dbPut("files",prior);return prior}
+    const item={id:makeId(),name:file.name,role:which,content,size:file.size,addedAt:Date.now(),lastUsed:Date.now()};
+    await dbPut("files",item);
+    return item;
+  }catch(e){showError("Файл выбран, но сохранить его в локальную библиотеку не удалось. Проверьте свободное место браузера.");return null}
+}
+async function refreshSavedFiles(){try{savedFiles=await dbAll("files");savedFiles.sort((a,b)=>(b.lastUsed||b.addedAt)-(a.lastUsed||a.addedAt));}catch(e){savedFiles=[];}}
+async function renderSavedFiles(){
+  await refreshSavedFiles();
+  for(const [role,containerId] of [["old","savedOldList"],["new","savedNewList"]]){
+    const list=savedFiles.filter(f=>f.role===role),container=$(containerId);
+    if(!list.length){container.innerHTML='<div class="modalEmpty">Пока нет сохранённых файлов</div>';continue}
+    container.innerHTML=list.map(f=>'<div class="savedItem" data-file-id="'+esc(f.id)+'"><div class="itemName">'+esc(f.name)+'</div><div class="itemMeta">'+new Date(f.addedAt).toLocaleString("ru-RU")+' · '+formatBytes(f.size)+'</div><div class="smallActions"><button class="smallBtn" data-pick="'+esc(f.id)+'">Использовать</button><button class="smallBtn danger" data-delete-file="'+esc(f.id)+'">Удалить</button></div></div>').join("");
+  }
+  document.querySelectorAll("[data-pick]").forEach(b=>b.onclick=e=>{e.stopPropagation();chooseSavedFile(b.dataset.pick)});
+  document.querySelectorAll(".savedItem").forEach(el=>el.onclick=()=>chooseSavedFile(el.dataset.fileId));
+  document.querySelectorAll("[data-delete-file]").forEach(b=>b.onclick=async e=>{e.stopPropagation();await dbDelete("files",b.dataset.deleteFile);await renderSavedFiles()});
+}
+function formatBytes(n){if(n<1024)return n+" Б";if(n<1048576)return (n/1024).toFixed(1)+" КБ";return (n/1048576).toFixed(1)+" МБ"}
+function chooseSavedFile(id){selectedSavedFile=savedFiles.find(f=>f.id===id);if(!selectedSavedFile)return;$("fileChoiceTitle").textContent=selectedSavedFile.name;closeModal("filesOverlay");openModal("fileChoiceOverlay")}
+async function useSavedFile(which){
+  if(!selectedSavedFile)return;
+  const f=selectedSavedFile;
+  const file=new File([f.content],f.name,{type:"text/csv"});
+  if(which==="old"){oldFile=file;$("oldName").textContent=f.name;$("oldFile").value=""}
+  else{newFile=file;$("newName").textContent=f.name;$("newFile").value=""}
+  f.lastUsed=Date.now();await dbPut("files",f);
+  $("compare").disabled=!(oldFile&&newFile);closeModal("fileChoiceOverlay");selectedSavedFile=null;hideError();
+}
+$("useAsOld").onclick=()=>useSavedFile("old");$("useAsNew").onclick=()=>useSavedFile("new");
+async function renderHistory(){
+  let entries=[];try{entries=(await dbAll("history")).sort((a,b)=>b.createdAt-a.createdAt)}catch(e){}
+  if(!entries.length){$("historyList").innerHTML='<div class="modalEmpty">История сравнений пока пуста. После первого сравнения оно появится здесь.</div>';return}
+  $("historyList").innerHTML=entries.map(h=>'<div class="historyItem" data-history-id="'+esc(h.id)+'"><div class="itemName">'+esc(h.oldName)+' → '+esc(h.newName)+'</div><div class="itemMeta">'+new Date(h.createdAt).toLocaleString("ru-RU")+' · старый: '+h.oldCount+' · новый: '+h.newCount+' · прибавились: '+h.added.length+' · убавились: '+h.removed.length+'</div><div class="smallActions"><button class="smallBtn" data-open-history="'+esc(h.id)+'">Открыть результат</button><button class="smallBtn danger" data-delete-history="'+esc(h.id)+'">Удалить</button></div></div>').join("");
+  document.querySelectorAll("[data-open-history]").forEach(b=>b.onclick=e=>{e.stopPropagation();restoreHistory(b.dataset.openHistory)});
+  document.querySelectorAll("[data-delete-history]").forEach(b=>b.onclick=async e=>{e.stopPropagation();await dbDelete("history",b.dataset.deleteHistory);await renderHistory()});
+  document.querySelectorAll(".historyItem").forEach(el=>el.onclick=()=>restoreHistory(el.dataset.historyId));
+}
+async function restoreHistory(id){
+  const h=(await dbAll("history")).find(x=>x.id===id);if(!h)return;
+  added=h.added||[];removed=h.removed||[];current="added";
+  $("oldCount").textContent=h.oldCount.toLocaleString("ru-RU");$("newCount").textContent=h.newCount.toLocaleString("ru-RU");
+  const diff=h.newCount-h.oldCount;$("totalChange").textContent=(diff>0?"+":"")+diff;
+  $("addedTab").textContent="🟢 Прибавились: "+added.length;$("removedTab").textContent="🔴 Убавились: "+removed.length;
+  $("addedTab").classList.add("active");$("removedTab").classList.remove("active");$("search").value="";
+  $("results").style.display="block";render();closeModal("historyOverlay");window.scrollTo({top:document.querySelector(".results").offsetTop-20,behavior:"smooth"});
+}
+
 
 const $=id=>document.getElementById(id);
 
@@ -187,6 +321,7 @@ function setFile(file,nameId,which){
   }
   if(which==="old")oldFile=file;else newFile=file;
   $(nameId).textContent=file.name;
+  saveUploadedFile(file,which).then(()=>refreshSavedFiles()).catch(()=>{});
   $("compare").disabled=!(oldFile&&newFile);
   hideError();
 }
@@ -267,6 +402,7 @@ $("compare").addEventListener("click",async()=>{
   try{
     const [ot,nt]=await Promise.all([readFile(oldFile),readFile(newFile)]);
     const oldMap=parseUsers(ot),newMap=parseUsers(nt);
+    currentOldUsers=Array.from(oldMap.values());currentNewUsers=Array.from(newMap.values());
     added=[];removed=[];
     for(const [id,u] of newMap)if(!oldMap.has(id))added.push(u);
     for(const [id,u] of oldMap)if(!newMap.has(id))removed.push(u);
@@ -281,6 +417,7 @@ $("compare").addEventListener("click",async()=>{
     current="added";$("addedTab").classList.add("active");$("removedTab").classList.remove("active");
     $("results").style.display="block";
     render();
+    try{await dbPut("history",{id:makeId(),createdAt:Date.now(),oldName:oldFile.name,newName:newFile.name,oldCount:oldMap.size,newCount:newMap.size,added:added.slice(),removed:removed.slice()});}catch(e){showError("Сравнение выполнено, но историю сохранить не удалось. Возможно, в браузере закончилось место.");}
   }catch(e){showError(e.message||"Не удалось обработать CSV.");}
 });
 $("addedTab").onclick=()=>{current="added";$("addedTab").classList.add("active");$("removedTab").classList.remove("active");render()};

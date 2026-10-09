@@ -173,16 +173,16 @@ h1{font-size:clamp(30px,4vw,43px);font-weight:800;letter-spacing:-1.5px;line-hei
 }
 .sideBtn:hover{background:#202944;border-color:#8b7cff;transform:translateX(2px)}
 .sideBtn.modeActive{border-color:#8b7cff;background:linear-gradient(110deg,rgba(118,104,255,.24),rgba(50,75,125,.24));box-shadow:0 0 0 1px rgba(139,124,255,.12),0 10px 28px rgba(0,0,0,.24)}
-.chartCard{margin-top:22px;padding:22px;background:linear-gradient(145deg,rgba(18,28,49,.97),rgba(11,18,33,.97));border:1px solid rgba(110,139,200,.24);border-radius:22px;box-shadow:0 18px 50px #0003;overflow:hidden}
-.chartHead{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:8px;flex-wrap:wrap}
-.chartHead h2{margin:0;font-size:17px;letter-spacing:-.3px}
-.chartSub{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5}
-.chartLegend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:#c4cde2}
-.legendDot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
-.chartViewport{width:100%;overflow:hidden}
-.chartViewport svg{display:block;width:100%;height:auto;min-height:190px}
-.chartEmpty{padding:28px 12px;text-align:center;color:var(--muted);font-size:13px;line-height:1.6}
-@media(max-width:700px){.chartCard{padding:16px;border-radius:17px}.chartViewport svg{min-height:160px}.chartHead h2{font-size:15px}}
+
+
+
+
+
+
+
+
+
+@media(max-width:700px){}
 .stats{gap:14px;margin-top:22px}
 .stat{
   background:linear-gradient(145deg,rgba(25,34,56,.95),rgba(17,24,41,.95));
@@ -352,10 +352,7 @@ h1{font-size:clamp(30px,4vw,43px);font-weight:800;letter-spacing:-1.5px;line-hei
 
     <div class="note"></div>
     <button class="btn" id="exportPdf" style="margin-top:18px">📄 Скачать PDF</button>
-    <section class="chartCard" aria-label="График динамики подписок">
-      <div class="chartHead"><div><h2 id="chartTitle">Динамика подписок</h2><div class="chartSub">Количество пользователей по датам из названий CSV. Наведите на точку, чтобы увидеть оба периода.</div></div><div class="chartLegend"><span><i class="legendDot" style="background:#8b7cff"></i>Было</span><span><i class="legendDot" style="background:#42dfb0"></i>Сейчас</span></div></div>
-      <div class="chartViewport" id="dynamicsChart"><div class="chartEmpty">График появится после сохранения первого сравнения.</div></div>
-    </section>
+
   </div>
 </div>
 
@@ -369,21 +366,20 @@ const $=id=>document.getElementById(id);
 let oldFile=null,newFile=null,added=[],removed=[],current="added";
 let appMode="subscriptions";
 let savedFiles=[],selectedSavedFile=null,currentOldUsers=[],currentNewUsers=[];
-const MODE_LABELS={subscriptions:{old:"Было подписок",now:"Сейчас подписок",added:"Подписался",removed:"Отписался",chart:"Динамика подписок"},followers:{old:"Было подписчиков",now:"Сейчас подписчиков",added:"Подписались",removed:"Отписались",chart:"Динамика подписчиков"}};
+const MODE_LABELS={subscriptions:{old:"Было подписок",now:"Сейчас подписок",added:"Подписался",removed:"Отписался"},followers:{old:"Было подписчиков",now:"Сейчас подписчиков",added:"Подписались",removed:"Отписались"}};
 function modeLabel(key){return MODE_LABELS[appMode][key]}
 function updateModeUI(){
   $("subscriptionsMode").classList.toggle("modeActive",appMode==="subscriptions");$("subscriptionsMode").setAttribute("aria-pressed",String(appMode==="subscriptions"));
   $("followersMode").classList.toggle("modeActive",appMode==="followers");$("followersMode").setAttribute("aria-pressed",String(appMode==="followers"));
   $("oldCountLabel").textContent=modeLabel("old");$("newCountLabel").textContent=modeLabel("now");
   $("addedTab").textContent="🟢 "+modeLabel("added")+": "+added.length;$("removedTab").textContent="🔴 "+modeLabel("removed")+": "+removed.length;
-  $("chartTitle").textContent=modeLabel("chart");
 }
 async function switchMode(nextMode){
   if(nextMode===appMode)return;
   appMode=nextMode;oldFile=null;newFile=null;added=[];removed=[];current="added";currentOldUsers=[];currentNewUsers=[];
   $("oldFile").value="";$("newFile").value="";$("oldName").textContent="";$("newName").textContent="";$("compare").disabled=true;
   $("results").style.display="none";$("error").style.display="none";$("search").value="";selectedSavedFile=null;
-  updateModeUI();await refreshSavedFiles();await renderDynamicsChart();
+  updateModeUI();await refreshSavedFiles();
 }
 const DB_NAME="subscriber-comparison-local", DB_VERSION=1;
 function openLocalDB(){
@@ -459,7 +455,7 @@ async function restoreHistory(id){
   const diff=h.newCount-h.oldCount;$("totalChange").textContent=(diff>0?"+":"")+diff;
   $("addedTab").textContent="🟢 "+modeLabel("added")+": "+added.length;$("removedTab").textContent="🔴 "+modeLabel("removed")+": "+removed.length;
   $("addedTab").classList.add("active");$("removedTab").classList.remove("active");$("search").value="";
-  $("results").style.display="block";render();renderDynamicsChart();closeModal("historyOverlay");window.scrollTo({top:document.querySelector(".results").offsetTop-20,behavior:"smooth"});
+  $("results").style.display="block";render();closeModal("historyOverlay");window.scrollTo({top:document.querySelector(".results").offsetTop-20,behavior:"smooth"});
 }
 
 
@@ -600,7 +596,7 @@ $("compare").addEventListener("click",async()=>{
     current="added";$("addedTab").classList.add("active");$("removedTab").classList.remove("active");
     $("results").style.display="block";
     render();
-    try{await dbPut("history",{id:makeId(),mode:appMode,createdAt:Date.now(),oldName:oldFile.name,newName:newFile.name,oldCount:oldMap.size,newCount:newMap.size,added:added.slice(),removed:removed.slice()});await renderDynamicsChart();}catch(e){showError("Сравнение выполнено, но историю сохранить не удалось. Возможно, в браузере закончилось место.");}
+    try{await dbPut("history",{id:makeId(),mode:appMode,createdAt:Date.now(),oldName:oldFile.name,newName:newFile.name,oldCount:oldMap.size,newCount:newMap.size,added:added.slice(),removed:removed.slice()});}catch(e){showError("Сравнение выполнено, но историю сохранить не удалось. Возможно, в браузере закончилось место.");}
   }catch(e){showError(e.message||"Не удалось обработать CSV.");}
 });
 $("addedTab").onclick=()=>{current="added";$("addedTab").classList.add("active");$("removedTab").classList.remove("active");render()};
@@ -638,114 +634,6 @@ $("exportPdf").addEventListener("click",()=>{
   window.pdfMake.createPdf(doc).download("InstaAnalyz-"+appMode+"-"+stamp+".pdf");
 });
 
-function parseFilenameDates(name){
-  const s=String(name||"");
-  const found=[];
-  const add=(year,month,day)=>{
-    let y=Number(year);
-    if(String(year).length===2)y+=2000;
-    const m=Number(month),d=Number(day);
-    const date=new Date(y,m-1,d);
-    // Reject impossible calendar dates instead of silently rolling them into another month.
-    if(date.getFullYear()===y&&date.getMonth()===m-1&&date.getDate()===d&&!found.some(x=>x.getTime()===date.getTime()))found.push(date);
-  };
-  let match;
-  const dmy=/(?<!\d)(\d{1,2})[._/-](\d{1,2})[._/-](\d{2}|\d{4})(?!\d)/g;
-  while((match=dmy.exec(s)))add(match[3],match[2],match[1]);
-  const ymd=/(?<!\d)(\d{4})[._/-](\d{1,2})[._/-](\d{1,2})(?!\d)/g;
-  while((match=ymd.exec(s)))add(match[1],match[2],match[3]);
-  found.sort((a,b)=>a-b);
-  return found.length?{start:found[0],end:found[found.length-1]}:null;
-}
-function formatChartDate(date){
-  return date?date.toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric"}):"";
-}
-function chartPeriod(entry,which){
-  const name=which==="old"?entry.oldName:entry.newName;
-  const period=parseFilenameDates(name);
-  if(period)return period.start.getTime()===period.end.getTime()?formatChartDate(period.start):formatChartDate(period.start)+"–"+formatChartDate(period.end);
-  return "дата в имени не найдена";
-}
-function chartEntryTime(entry){
-  const oldPeriod=parseFilenameDates(entry.oldName),newPeriod=parseFilenameDates(entry.newName);
-  return (newPeriod?newPeriod.end:oldPeriod?oldPeriod.end:new Date(entry.createdAt)).getTime();
-}
-async function renderDynamicsChart(){
-  const host=$("dynamicsChart");if(!host)return;
-  let entries=[];
-  try{entries=(await dbAll("history")).filter(h=>(h.mode||"subscriptions")==appMode).sort((a,b)=>chartEntryTime(a)-chartEntryTime(b)||a.createdAt-b.createdAt)}catch(e){}
-  $("chartTitle").textContent=modeLabel("chart");
-  if(!entries.length){host.innerHTML='<div class="chartEmpty">Сравните CSV — график покажет историю количества пользователей. Даты берутся из названий загруженных файлов.</div>';return}
-
-  // Each CSV snapshot gets its own real date on the horizontal axis.
-  // Old-file counts use the old filename date; new-file counts use the new filename date.
-  const snapshot=(entry,which)=>{
-    const period=parseFilenameDates(which==="old"?entry.oldName:entry.newName);
-    const date=period?(which==="old"?period.start:period.end):new Date(entry.createdAt);
-    return {
-      time:date.getTime(),
-      value:Math.max(0,Number(which==="old"?entry.oldCount:entry.newCount)||0),
-      entry,
-      which,
-      date
-    };
-  };
-  const oldPts=entries.map(e=>snapshot(e,"old")).sort((a,b)=>a.time-b.time||a.entry.createdAt-b.entry.createdAt);
-  const newPts=entries.map(e=>snapshot(e,"new")).sort((a,b)=>a.time-b.time||a.entry.createdAt-b.entry.createdAt);
-  const allPts=oldPts.concat(newPts).sort((a,b)=>a.time-b.time);
-  const values=allPts.map(p=>p.value);
-  let min=Math.min(...values),max=Math.max(...values);
-  if(min===max){const pad=Math.max(1,Math.round(min*.01));min=Math.max(0,min-pad);max+=pad}
-  const yPad=(max-min)*.12;min=Math.max(0,min-yPad);max+=yPad;
-
-  let minTime=Math.min(...allPts.map(p=>p.time)),maxTime=Math.max(...allPts.map(p=>p.time));
-  if(minTime===maxTime){minTime-=12*60*60*1000;maxTime+=12*60*60*1000}
-  const W=900,H=320,L=66,R=24,T=22,B=68,plotW=W-L-R,plotH=H-T-B;
-  const x=time=>L+(time-minTime)/(maxTime-minTime)*plotW;
-  const y=value=>T+(max-value)/(max-min)*plotH;
-  const smooth=pts=>{
-    if(!pts.length)return "";
-    if(pts.length===1)return "M "+x(pts[0].time)+" "+y(pts[0].value);
-    let path="M "+x(pts[0].time)+" "+y(pts[0].value);
-    for(let i=0;i<pts.length-1;i++){
-      const p0=pts[Math.max(0,i-1)],p1=pts[i],p2=pts[i+1],p3=pts[Math.min(pts.length-1,i+2)];
-      const x1=x(p1.time),y1=y(p1.value),x2=x(p2.time),y2=y(p2.value);
-      const c1x=x1+(x(p2.time)-x(p0.time))*.72/6;
-      const c1y=y1+(y(p2.value)-y(p0.value))*.72/6;
-      const c2x=x2-(x(p3.time)-x(p1.time))*.72/6;
-      const c2y=y2-(y(p3.value)-y(p1.value))*.72/6;
-      path+=" C "+c1x+" "+c1y+", "+c2x+" "+c2y+", "+x2+" "+y2;
-    }
-    return path;
-  };
-  const ticks=Array.from({length:5},(_,i)=>min+(max-min)*i/4);
-  const grid=ticks.map(v=>'<line x1="'+L+'" y1="'+y(v)+'" x2="'+(W-R)+'" y2="'+y(v)+'" stroke="#283650" stroke-width="1"/><text x="'+(L-12)+'" y="'+(y(v)+4)+'" text-anchor="end" fill="#8190ad" font-size="11">'+Math.round(v).toLocaleString("ru-RU")+'</text>').join("");
-  const dateText=time=>new Date(time).toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"2-digit"});
-  const uniqueTimes=[...new Set(allPts.map(p=>p.time))].sort((a,b)=>a-b);
-  const labelIndexes=new Set();
-  if(uniqueTimes.length<=6)uniqueTimes.forEach((_,i)=>labelIndexes.add(i));
-  else for(let i=0;i<6;i++)labelIndexes.add(Math.round(i*(uniqueTimes.length-1)/5));
-  const xlabels=uniqueTimes.map((time,i)=>{
-    if(!labelIndexes.has(i))return "";
-    return '<text x="'+x(time)+'" y="'+(H-28)+'" text-anchor="middle" fill="#a0aec8" font-size="10">'+dateText(time)+'</text>';
-  }).join("");
-  const dots=(pts,color,label)=>pts.map(p=>{
-    const e=p.entry;
-    const value=p.value;
-    const filename=p.which==="old"?e.oldName:e.newName;
-    const period=chartPeriod(e,p.which);
-    const title=label+": "+value.toLocaleString("ru-RU")+" · Дата: "+dateText(p.time)+" · Файл: "+filename+" · Период: "+period;
-    return '<circle cx="'+x(p.time)+'" cy="'+y(value)+'" r="'+(entries.length>22?2.8:4)+'" fill="'+color+'" stroke="#0c1425" stroke-width="2"><title>'+esc(title)+'</title></circle>';
-  }).join("");
-  const newLine=smooth(newPts);
-  const newArea=newPts.length>1?'<path d="'+newLine+' L '+x(newPts[newPts.length-1].time)+' '+(T+plotH)+' L '+x(newPts[0].time)+' '+(T+plotH)+' Z" fill="url(#newArea)"/>':"";
-  host.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="График динамики количества пользователей по реальным датам CSV">'+
-    '<defs><linearGradient id="newArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#42dfb0" stop-opacity=".22"/><stop offset="100%" stop-color="#42dfb0" stop-opacity="0"/></linearGradient><filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>'+
-    grid+newArea+
-    '<path d="'+smooth(oldPts)+'" fill="none" stroke="#8b7cff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/>'+
-    '<path d="'+newLine+'" fill="none" stroke="#42dfb0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>'+
-    dots(oldPts,"#8b7cff","Было")+dots(newPts,"#42dfb0","Сейчас")+xlabels+'</svg>';
-}
 function instagramUrl(value){
   const username=String(value??"").trim().replace(/^@/,"");
   if(!/^[A-Za-z0-9._]{1,30}$/.test(username))return "";

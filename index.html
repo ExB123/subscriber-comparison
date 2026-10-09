@@ -313,14 +313,14 @@ h1{font-size:clamp(30px,4vw,43px);font-weight:800;letter-spacing:-1.5px;line-hei
 
   <div class="results" id="results">
     <div class="stats">
-      <div class="stat"><div class="label">Старый файл</div><div class="num" id="oldCount">0</div></div>
-      <div class="stat"><div class="label">Новый файл</div><div class="num" id="newCount">0</div></div>
+      <div class="stat"><div class="label">Было подписок</div><div class="num" id="oldCount">0</div></div>
+      <div class="stat"><div class="label">Сейчас подписок</div><div class="num" id="newCount">0</div></div>
       <div class="stat"><div class="label">Общее изменение</div><div class="num" id="totalChange">0</div></div>
     </div>
 
     <div class="resultTabs" style="margin-top:18px">
-      <button class="tab active green" id="addedTab">🟢 Прибавились: 0</button>
-      <button class="tab red" id="removedTab">🔴 Убавились: 0</button>
+      <button class="tab active green" id="addedTab">🟢 Подписался: 0</button>
+      <button class="tab red" id="removedTab">🔴 Отписался: 0</button>
     </div>
 
     <div class="list">
@@ -330,7 +330,6 @@ h1{font-size:clamp(30px,4vw,43px);font-weight:800;letter-spacing:-1.5px;line-hei
     </div>
 
     <div class="note">
-      Сравнение выполняется по <b>ID пользователя</b>. Файлы обрабатываются прямо в браузере и не отправляются на сервер. Нажмите на строку профиля, чтобы открыть его Instagram в новой вкладке.
     </div>
   </div>
 </div>
@@ -411,7 +410,7 @@ async function restoreHistory(id){
   added=h.added||[];removed=h.removed||[];current="added";
   $("oldCount").textContent=h.oldCount.toLocaleString("ru-RU");$("newCount").textContent=h.newCount.toLocaleString("ru-RU");
   const diff=h.newCount-h.oldCount;$("totalChange").textContent=(diff>0?"+":"")+diff;
-  $("addedTab").textContent="🟢 Прибавились: "+added.length;$("removedTab").textContent="🔴 Убавились: "+removed.length;
+  $("addedTab").textContent="🟢 Подписался: "+added.length;$("removedTab").textContent="🔴 Отписался: "+removed.length;
   $("addedTab").classList.add("active");$("removedTab").classList.remove("active");$("search").value="";
   $("results").style.display="block";render();closeModal("historyOverlay");window.scrollTo({top:document.querySelector(".results").offsetTop-20,behavior:"smooth"});
 }
@@ -548,8 +547,8 @@ $("compare").addEventListener("click",async()=>{
     $("newCount").textContent=newMap.size.toLocaleString("ru-RU");
     const diff=newMap.size-oldMap.size;
     $("totalChange").textContent=(diff>0?"+":"")+diff;
-    $("addedTab").textContent="🟢 Прибавились: "+added.length;
-    $("removedTab").textContent="🔴 Убавились: "+removed.length;
+    $("addedTab").textContent="🟢 Подписался: "+added.length;
+    $("removedTab").textContent="🔴 Отписался: "+removed.length;
     current="added";$("addedTab").classList.add("active");$("removedTab").classList.remove("active");
     $("results").style.display="block";
     render();

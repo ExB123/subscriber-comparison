@@ -65,6 +65,10 @@ input[type=file]{display:none}
 .row.header{color:var(--muted);font-size:12px;font-weight:700}
 .row:last-child{border-bottom:0}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+.profileRow{color:inherit;text-decoration:none;transition:background .15s}
+.profileRow[href]:hover{background:#232938}
+.profileRow[href] .username{color:#aeb8ff;text-decoration:underline;text-underline-offset:3px}
+.profileRow:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .empty{padding:35px;text-align:center;color:var(--muted)}
 .error{
   display:none;background:#321b21;border:1px solid #71303c;color:#ffb4be;
@@ -151,7 +155,7 @@ input[type=file]{display:none}
     </div>
 
     <div class="note">
-      Сравнение выполняется по <b>ID пользователя</b>. Файлы обрабатываются прямо в браузере и не отправляются на сервер.
+      Сравнение выполняется по <b>ID пользователя</b>. Файлы обрабатываются прямо в браузере и не отправляются на сервер. Нажмите на строку профиля, чтобы открыть его Instagram в новой вкладке.
     </div>
   </div>
 </div>
@@ -183,7 +187,6 @@ function setFile(file,nameId,which){
   }
   if(which==="old")oldFile=file;else newFile=file;
   $(nameId).textContent=file.name;
-  $(nameId).nextElementSibling?.remove?.();
   $("compare").disabled=!(oldFile&&newFile);
   hideError();
 }
@@ -191,12 +194,12 @@ setupInput("oldFile","oldName","oldDrop","old");
 setupInput("newFile","newName","newDrop","new");
 
 function detectDelimiter(text){
-  const first=text.split(/\r?\n/).find(x=>x.trim());
-  const candidates=[",",";","\\t"];
+  const first=text.split(/\r?\n/).find(x=>x.trim())||"";
+  const candidates=[",",";","\t"];
   let best=",",max=-1;
   for(const d of candidates){
-    const n=first.split(d==="\\t"?"\\t":d).length;
-    if(n>max){max=n;best=d==="\\t"?"\\t":d;}
+    const n=first.split(d).length;
+    if(n>max){max=n;best=d;}
   }
   return best;
 }
@@ -236,7 +239,6 @@ function parseUsers(text){
   const usernameCol=findCol(headers,["имя пользователя","username","user name"]);
   const fullCol=findCol(headers,["полное имя","full name","name"]);
   if(idCol<0) {
-    // Запасной вариант: используем username, если ID отсутствует.
     if(usernameCol<0)throw new Error("Не найден столбец с ID пользователя или именем пользователя.");
     idCol=usernameCol;
   }
@@ -255,7 +257,6 @@ function parseUsers(text){
 }
 async function readFile(file){
   const buf=await file.arrayBuffer();
-  // UTF-8 с автоматическим fallback на Windows-1251 для русских CSV.
   let text;
   try{text=new TextDecoder("utf-8",{fatal:true}).decode(buf)}
   catch{text=new TextDecoder("windows-1251").decode(buf)}
@@ -286,6 +287,11 @@ $("addedTab").onclick=()=>{current="added";$("addedTab").classList.add("active")
 $("removedTab").onclick=()=>{current="removed";$("removedTab").classList.add("active");$("addedTab").classList.remove("active");render()};
 $("search").addEventListener("input",render);
 
+function instagramUrl(value){
+  const username=String(value??"").trim().replace(/^@/,"");
+  if(!/^[A-Za-z0-9._]{1,30}$/.test(username))return "";
+  return "https://www.instagram.com/"+encodeURIComponent(username)+"/";
+}
 function render(){
   const data=current==="added"?added:removed;
   const q=norm($("search").value);
@@ -296,13 +302,17 @@ function render(){
     $("listBody").innerHTML='<div class="empty">'+(data.length?"Ничего не найдено.":"Различий не обнаружено.")+"</div>";
     return;
   }
-  $("listBody").innerHTML=filtered.map((u,i)=>`
-    <div class="row">
-      <div class="mono">${i+1}</div>
-      <div class="mono">${esc(u.id)}</div>
-      <div>${esc(u.name)||"—"}</div>
-      <div>${esc(u.username)||"—"}</div>
-    </div>`).join("");
+  $("listBody").innerHTML=filtered.map((u,i)=>{
+    const url=instagramUrl(u.username);
+    const tag=url?"a":"div";
+    const linkAttrs=url?' href="'+esc(url)+'" target="_blank" rel="noopener noreferrer" aria-label="Открыть Instagram профиля '+esc(u.username)+'"':"";
+    return '<'+tag+' class="row profileRow"'+linkAttrs+'>'+
+      '<div class="mono">'+(i+1)+'</div>'+
+      '<div class="mono">'+esc(u.id)+'</div>'+
+      '<div>'+ (esc(u.name)||"—")+'</div>'+
+      '<div class="username">'+(esc(u.username)||"—")+'</div>'+
+    '</'+tag+'>';
+  }).join("");
 }
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
 function showError(t){$("error").textContent=t;$("error").style.display="block"}

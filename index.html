@@ -676,47 +676,75 @@ async function renderDynamicsChart(){
   try{entries=(await dbAll("history")).filter(h=>(h.mode||"subscriptions")==appMode).sort((a,b)=>chartEntryTime(a)-chartEntryTime(b)||a.createdAt-b.createdAt)}catch(e){}
   $("chartTitle").textContent=modeLabel("chart");
   if(!entries.length){host.innerHTML='<div class="chartEmpty">Сравните CSV — график покажет историю количества пользователей. Даты берутся из названий загруженных файлов.</div>';return}
-  const W=900,H=300,L=62,R=24,T=22,B=62,plotW=W-L-R,plotH=H-T-B;
-  const vals=entries.flatMap(e=>[Number(e.oldCount)||0,Number(e.newCount)||0]);
-  let min=Math.min(...vals),max=Math.max(...vals);if(min===max){min=Math.max(0,min-Math.max(1,Math.round(min*.08)));max=max+Math.max(1,Math.round(max*.08))}
-  const pad=(max-min)*.12;min=Math.max(0,min-pad);max+=pad;
-  const x=i=>entries.length===1?L+plotW/2:L+i*plotW/(entries.length-1);
-  const y=v=>T+(max-v)/(max-min)*plotH;
+
+  // Each CSV snapshot gets its own real date on the horizontal axis.
+  // Old-file counts use the old filename date; new-file counts use the new filename date.
+  const snapshot=(entry,which)=>{
+    const period=parseFilenameDates(which==="old"?entry.oldName:entry.newName);
+    const date=period?(which==="old"?period.start:period.end):new Date(entry.createdAt);
+    return {
+      time:date.getTime(),
+      value:Math.max(0,Number(which==="old"?entry.oldCount:entry.newCount)||0),
+      entry,
+      which,
+      date
+    };
+  };
+  const oldPts=entries.map(e=>snapshot(e,"old")).sort((a,b)=>a.time-b.time||a.entry.createdAt-b.entry.createdAt);
+  const newPts=entries.map(e=>snapshot(e,"new")).sort((a,b)=>a.time-b.time||a.entry.createdAt-b.entry.createdAt);
+  const allPts=oldPts.concat(newPts).sort((a,b)=>a.time-b.time);
+  const values=allPts.map(p=>p.value);
+  let min=Math.min(...values),max=Math.max(...values);
+  if(min===max){const pad=Math.max(1,Math.round(min*.01));min=Math.max(0,min-pad);max+=pad}
+  const yPad=(max-min)*.12;min=Math.max(0,min-yPad);max+=yPad;
+
+  let minTime=Math.min(...allPts.map(p=>p.time)),maxTime=Math.max(...allPts.map(p=>p.time));
+  if(minTime===maxTime){minTime-=12*60*60*1000;maxTime+=12*60*60*1000}
+  const W=900,H=320,L=66,R=24,T=22,B=68,plotW=W-L-R,plotH=H-T-B;
+  const x=time=>L+(time-minTime)/(maxTime-minTime)*plotW;
+  const y=value=>T+(max-value)/(max-min)*plotH;
   const smooth=pts=>{
-    if(pts.length===0)return "";
-    if(pts.length===1)return "M "+pts[0][0]+" "+pts[0][1];
-    let path="M "+pts[0][0]+" "+pts[0][1];
+    if(!pts.length)return "";
+    if(pts.length===1)return "M "+x(pts[0].time)+" "+y(pts[0].value);
+    let path="M "+x(pts[0].time)+" "+y(pts[0].value);
     for(let i=0;i<pts.length-1;i++){
       const p0=pts[Math.max(0,i-1)],p1=pts[i],p2=pts[i+1],p3=pts[Math.min(pts.length-1,i+2)];
-      const tension=.72;
-      const c1x=p1[0]+(p2[0]-p0[0])*tension/6,c1y=p1[1]+(p2[1]-p0[1])*tension/6;
-      const c2x=p2[0]-(p3[0]-p1[0])*tension/6,c2y=p2[1]-(p3[1]-p1[1])*tension/6;
-      path+=" C "+c1x+" "+c1y+", "+c2x+" "+c2y+", "+p2[0]+" "+p2[1];
+      const x1=x(p1.time),y1=y(p1.value),x2=x(p2.time),y2=y(p2.value);
+      const c1x=x1+(x(p2.time)-x(p0.time))*.72/6;
+      const c1y=y1+(y(p2.value)-y(p0.value))*.72/6;
+      const c2x=x2-(x(p3.time)-x(p1.time))*.72/6;
+      const c2y=y2-(y(p3.value)-y(p1.value))*.72/6;
+      path+=" C "+c1x+" "+c1y+", "+c2x+" "+c2y+", "+x2+" "+y2;
     }
     return path;
   };
-  const oldPts=entries.map((e,i)=>[x(i),y(Number(e.oldCount)||0)]),newPts=entries.map((e,i)=>[x(i),y(Number(e.newCount)||0)]);
   const ticks=Array.from({length:5},(_,i)=>min+(max-min)*i/4);
   const grid=ticks.map(v=>'<line x1="'+L+'" y1="'+y(v)+'" x2="'+(W-R)+'" y2="'+y(v)+'" stroke="#283650" stroke-width="1"/><text x="'+(L-12)+'" y="'+(y(v)+4)+'" text-anchor="end" fill="#8190ad" font-size="11">'+Math.round(v).toLocaleString("ru-RU")+'</text>').join("");
-  const dots=(pts,key,color)=>pts.map((p,i)=>{
-    const e=entries[i],value=key==="old"?e.oldCount:e.newCount;
-    const title="Старый файл: "+e.oldName+" ("+chartPeriod(e,"old")+") · Новый файл: "+e.newName+" ("+chartPeriod(e,"new")+") · "+(key==="old"?"Было":"Сейчас")+": "+value;
-    return '<circle cx="'+p[0]+'" cy="'+p[1]+'" r="'+(entries.length>22?2.5:4)+'" fill="'+color+'" stroke="#0c1425" stroke-width="2"><title>'+esc(title)+'</title></circle>';
+  const dateText=time=>new Date(time).toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"2-digit"});
+  const uniqueTimes=[...new Set(allPts.map(p=>p.time))].sort((a,b)=>a-b);
+  const labelIndexes=new Set();
+  if(uniqueTimes.length<=6)uniqueTimes.forEach((_,i)=>labelIndexes.add(i));
+  else for(let i=0;i<6;i++)labelIndexes.add(Math.round(i*(uniqueTimes.length-1)/5));
+  const xlabels=uniqueTimes.map((time,i)=>{
+    if(!labelIndexes.has(i))return "";
+    return '<text x="'+x(time)+'" y="'+(H-28)+'" text-anchor="middle" fill="#a0aec8" font-size="10">'+dateText(time)+'</text>';
   }).join("");
-  const xlabels=entries.map((e,i)=>{
-    if(entries.length>8&&i%Math.ceil(entries.length/6)!==0&&i!==entries.length-1)return "";
-    const oldP=parseFilenameDates(e.oldName),newP=parseFilenameDates(e.newName);
-    const start=oldP?oldP.start:null,end=newP?newP.end:null;
-    const label=start&&end?formatChartDate(start)+" → "+formatChartDate(end):formatChartDate(new Date(e.createdAt));
-    const shortLabel=label.length>23?label.replace(/\.(\d{4})/g,".$1"):label;
-    return '<text x="'+x(i)+'" y="'+(H-25)+'" text-anchor="middle" fill="#a0aec8" font-size="10"><title>'+esc(label)+'</title>'+esc(shortLabel)+'</text>';
+  const dots=(pts,color,label)=>pts.map(p=>{
+    const e=p.entry;
+    const value=p.value;
+    const filename=p.which==="old"?e.oldName:e.newName;
+    const period=chartPeriod(e,p.which);
+    const title=label+": "+value.toLocaleString("ru-RU")+" · Дата: "+dateText(p.time)+" · Файл: "+filename+" · Период: "+period;
+    return '<circle cx="'+x(p.time)+'" cy="'+y(value)+'" r="'+(entries.length>22?2.8:4)+'" fill="'+color+'" stroke="#0c1425" stroke-width="2"><title>'+esc(title)+'</title></circle>';
   }).join("");
-  host.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="График количества пользователей с датами из названий CSV">'+
+  const newLine=smooth(newPts);
+  const newArea=newPts.length>1?'<path d="'+newLine+' L '+x(newPts[newPts.length-1].time)+' '+(T+plotH)+' L '+x(newPts[0].time)+' '+(T+plotH)+' Z" fill="url(#newArea)"/>':"";
+  host.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="График динамики количества пользователей по реальным датам CSV">'+
     '<defs><linearGradient id="newArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#42dfb0" stop-opacity=".22"/><stop offset="100%" stop-color="#42dfb0" stop-opacity="0"/></linearGradient><filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>'+
-    grid+'<path d="'+smooth(newPts)+' L '+newPts[newPts.length-1][0]+' '+(T+plotH)+' L '+newPts[0][0]+' '+(T+plotH)+' Z" fill="url(#newArea)"/>'+
+    grid+newArea+
     '<path d="'+smooth(oldPts)+'" fill="none" stroke="#8b7cff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/>'+
-    '<path d="'+smooth(newPts)+'" fill="none" stroke="#42dfb0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>'+
-    dots(oldPts,"old","#8b7cff")+dots(newPts,"new","#42dfb0")+xlabels+'</svg>';
+    '<path d="'+newLine+'" fill="none" stroke="#42dfb0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>'+
+    dots(oldPts,"#8b7cff","Было")+dots(newPts,"#42dfb0","Сейчас")+xlabels+'</svg>';
 }
 function instagramUrl(value){
   const username=String(value??"").trim().replace(/^@/,"");

@@ -650,9 +650,9 @@ function parseFilenameDates(name){
     if(date.getFullYear()===y&&date.getMonth()===m-1&&date.getDate()===d&&!found.some(x=>x.getTime()===date.getTime()))found.push(date);
   };
   let match;
-  const dmy=/(\d{1,2})[._/-](\d{1,2})[._/-](\d{2}|\d{4})(?!\d)/g;
+  const dmy=/(?<!\d)(\d{1,2})[._/-](\d{1,2})[._/-](\d{2}|\d{4})(?!\d)/g;
   while((match=dmy.exec(s)))add(match[3],match[2],match[1]);
-  const ymd=/(\d{4})[._/-](\d{1,2})[._/-](\d{1,2})(?!\d)/g;
+  const ymd=/(?<!\d)(\d{4})[._/-](\d{1,2})[._/-](\d{1,2})(?!\d)/g;
   while((match=ymd.exec(s)))add(match[1],match[2],match[3]);
   found.sort((a,b)=>a-b);
   return found.length?{start:found[0],end:found[found.length-1]}:null;

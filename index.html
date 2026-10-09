@@ -172,6 +172,17 @@ h1{font-size:clamp(30px,4vw,43px);font-weight:800;letter-spacing:-1.5px;line-hei
   transition:background .18s,border-color .18s,transform .18s;
 }
 .sideBtn:hover{background:#202944;border-color:#8b7cff;transform:translateX(2px)}
+.sideBtn.modeActive{border-color:#8b7cff;background:linear-gradient(110deg,rgba(118,104,255,.24),rgba(50,75,125,.24));box-shadow:0 0 0 1px rgba(139,124,255,.12),0 10px 28px rgba(0,0,0,.24)}
+.chartCard{margin-top:22px;padding:22px;background:linear-gradient(145deg,rgba(18,28,49,.97),rgba(11,18,33,.97));border:1px solid rgba(110,139,200,.24);border-radius:22px;box-shadow:0 18px 50px #0003;overflow:hidden}
+.chartHead{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:8px;flex-wrap:wrap}
+.chartHead h2{margin:0;font-size:17px;letter-spacing:-.3px}
+.chartSub{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5}
+.chartLegend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:#c4cde2}
+.legendDot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.chartViewport{width:100%;overflow:hidden}
+.chartViewport svg{display:block;width:100%;height:auto;min-height:190px}
+.chartEmpty{padding:28px 12px;text-align:center;color:var(--muted);font-size:13px;line-height:1.6}
+@media(max-width:700px){.chartCard{padding:16px;border-radius:17px}.chartViewport svg{min-height:160px}.chartHead h2{font-size:15px}}
 .stats{gap:14px;margin-top:22px}
 .stat{
   background:linear-gradient(145deg,rgba(25,34,56,.95),rgba(17,24,41,.95));
@@ -257,6 +268,8 @@ h1{font-size:clamp(30px,4vw,43px);font-weight:800;letter-spacing:-1.5px;line-hei
 <body>
 
   <div class="sideActions">
+    <button class="sideBtn modeActive" id="subscriptionsMode" aria-pressed="true">👤 Анализ подписок</button>
+    <button class="sideBtn" id="followersMode" aria-pressed="false">👥 Подписчики</button>
     <button class="sideBtn" id="filesOpen">📁 Файлы</button>
     <button class="sideBtn" id="historyOpen">🕘 История</button>
   </div>
@@ -300,7 +313,7 @@ h1{font-size:clamp(30px,4vw,43px);font-weight:800;letter-spacing:-1.5px;line-hei
       <h2>📁 Старый файл</h2>
       <label class="drop" id="oldDrop" for="oldFile">
         <div style="font-size:32px">⬆️</div>
-        <b>Old CSV</b>
+        <b>Old CSV</b><span id="oldName" style="display:none"></span>
       </label>
       <input id="oldFile" type="file" accept=".csv,text/csv">
     </div>
@@ -309,7 +322,7 @@ h1{font-size:clamp(30px,4vw,43px);font-weight:800;letter-spacing:-1.5px;line-hei
       <h2>📁 Новый файл</h2>
       <label class="drop" id="newDrop" for="newFile">
         <div style="font-size:32px">⬆️</div>
-        <b>New CSV</b>
+        <b>New CSV</b><span id="newName" style="display:none"></span>
       </label>
       <input id="newFile" type="file" accept=".csv,text/csv">
     </div>
@@ -320,8 +333,8 @@ h1{font-size:clamp(30px,4vw,43px);font-weight:800;letter-spacing:-1.5px;line-hei
 
   <div class="results" id="results">
     <div class="stats">
-      <div class="stat"><div class="label">Было подписок</div><div class="num" id="oldCount">0</div></div>
-      <div class="stat"><div class="label">Сейчас подписок</div><div class="num" id="newCount">0</div></div>
+      <div class="stat"><div class="label" id="oldCountLabel">Было подписок</div><div class="num" id="oldCount">0</div></div>
+      <div class="stat"><div class="label" id="newCountLabel">Сейчас подписок</div><div class="num" id="newCount">0</div></div>
       <div class="stat"><div class="label">Общее изменение</div><div class="num" id="totalChange">0</div></div>
     </div>
 
@@ -338,6 +351,10 @@ h1{font-size:clamp(30px,4vw,43px);font-weight:800;letter-spacing:-1.5px;line-hei
 
     <div class="note"></div>
     <button class="btn" id="exportPdf" style="margin-top:18px">📄 Скачать PDF</button>
+    <section class="chartCard" aria-label="График динамики подписок">
+      <div class="chartHead"><div><h2 id="chartTitle">Динамика подписок</h2><div class="chartSub">Количество пользователей в старом и новом CSV по каждому сохранённому сравнению</div></div><div class="chartLegend"><span><i class="legendDot" style="background:#8b7cff"></i>Было</span><span><i class="legendDot" style="background:#42dfb0"></i>Сейчас</span></div></div>
+      <div class="chartViewport" id="dynamicsChart"><div class="chartEmpty">График появится после сохранения первого сравнения.</div></div>
+    </section>
   </div>
 </div>
 
@@ -347,7 +364,24 @@ h1{font-size:clamp(30px,4vw,43px);font-weight:800;letter-spacing:-1.5px;line-hei
 const $=id=>document.getElementById(id);
 
 let oldFile=null,newFile=null,added=[],removed=[],current="added";
+let appMode="subscriptions";
 let savedFiles=[],selectedSavedFile=null,currentOldUsers=[],currentNewUsers=[];
+const MODE_LABELS={subscriptions:{old:"Было подписок",now:"Сейчас подписок",added:"Подписался",removed:"Отписался",chart:"Динамика подписок"},followers:{old:"Было подписчиков",now:"Сейчас подписчиков",added:"Подписались",removed:"Отписались",chart:"Динамика подписчиков"}};
+function modeLabel(key){return MODE_LABELS[appMode][key]}
+function updateModeUI(){
+  $("subscriptionsMode").classList.toggle("modeActive",appMode==="subscriptions");$("subscriptionsMode").setAttribute("aria-pressed",String(appMode==="subscriptions"));
+  $("followersMode").classList.toggle("modeActive",appMode==="followers");$("followersMode").setAttribute("aria-pressed",String(appMode==="followers"));
+  $("oldCountLabel").textContent=modeLabel("old");$("newCountLabel").textContent=modeLabel("now");
+  $("addedTab").textContent="🟢 "+modeLabel("added")+": "+added.length;$("removedTab").textContent="🔴 "+modeLabel("removed")+": "+removed.length;
+  $("chartTitle").textContent=modeLabel("chart");
+}
+async function switchMode(nextMode){
+  if(nextMode===appMode)return;
+  appMode=nextMode;oldFile=null;newFile=null;added=[];removed=[];current="added";currentOldUsers=[];currentNewUsers=[];
+  $("oldFile").value="";$("newFile").value="";$("oldName").textContent="";$("newName").textContent="";$("compare").disabled=true;
+  $("results").style.display="none";$("error").style.display="none";$("search").value="";selectedSavedFile=null;
+  updateModeUI();await refreshSavedFiles();await renderDynamicsChart();
+}
 const DB_NAME="subscriber-comparison-local", DB_VERSION=1;
 function openLocalDB(){
   return new Promise((resolve,reject)=>{
@@ -370,19 +404,20 @@ function openModal(id){$(id).style.display="flex"}
 function closeModal(id){$(id).style.display="none"}
 document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>closeModal(b.dataset.close)));
 document.querySelectorAll(".overlay").forEach(o=>o.addEventListener("click",e=>{if(e.target===o)o.style.display="none"}));
+$("subscriptionsMode").onclick=()=>switchMode("subscriptions");$("followersMode").onclick=()=>switchMode("followers");
 $("filesOpen").onclick=async()=>{await renderSavedFiles();openModal("filesOverlay")};
 $("historyOpen").onclick=async()=>{await renderHistory();openModal("historyOverlay")};
 async function saveUploadedFile(file,which){
   try{
     const content=await readFile(file);
-    const prior=savedFiles.find(x=>x.name===file.name&&x.role===which&&x.content===content);
+    const prior=savedFiles.find(x=>x.name===file.name&&x.role===which&&(x.mode||"subscriptions")===appMode&&x.content===content);
     if(prior){prior.lastUsed=Date.now();await dbPut("files",prior);return prior}
-    const item={id:makeId(),name:file.name,role:which,content,size:file.size,addedAt:Date.now(),lastUsed:Date.now()};
+    const item={id:makeId(),name:file.name,role:which,mode:appMode,content,size:file.size,addedAt:Date.now(),lastUsed:Date.now()};
     await dbPut("files",item);
     return item;
   }catch(e){showError("Файл выбран, но сохранить его в локальную библиотеку не удалось. Проверьте свободное место браузера.");return null}
 }
-async function refreshSavedFiles(){try{savedFiles=await dbAll("files");savedFiles.sort((a,b)=>(b.lastUsed||b.addedAt)-(a.lastUsed||a.addedAt));}catch(e){savedFiles=[];}}
+async function refreshSavedFiles(){try{savedFiles=(await dbAll("files")).filter(f=>(f.mode||"subscriptions")===appMode);savedFiles.sort((a,b)=>(b.lastUsed||b.addedAt)-(a.lastUsed||a.addedAt));}catch(e){savedFiles=[];}}
 async function renderSavedFiles(){
   await refreshSavedFiles();
   for(const [role,containerId] of [["old","savedOldList"],["new","savedNewList"]]){
@@ -407,9 +442,9 @@ async function useSavedFile(which){
 }
 $("useAsOld").onclick=()=>useSavedFile("old");$("useAsNew").onclick=()=>useSavedFile("new");
 async function renderHistory(){
-  let entries=[];try{entries=(await dbAll("history")).sort((a,b)=>b.createdAt-a.createdAt)}catch(e){}
+  let entries=[];try{entries=(await dbAll("history")).filter(h=>(h.mode||"subscriptions")===appMode).sort((a,b)=>b.createdAt-a.createdAt)}catch(e){}
   if(!entries.length){$("historyList").innerHTML='<div class="modalEmpty">История сравнений пока пуста. После первого сравнения оно появится здесь.</div>';return}
-  $("historyList").innerHTML=entries.map(h=>'<div class="historyItem" data-history-id="'+esc(h.id)+'"><div class="itemName">'+esc(h.oldName)+' → '+esc(h.newName)+'</div><div class="itemMeta">'+new Date(h.createdAt).toLocaleString("ru-RU")+' · старый: '+h.oldCount+' · новый: '+h.newCount+' · прибавились: '+h.added.length+' · убавились: '+h.removed.length+'</div><div class="smallActions"><button class="smallBtn" data-open-history="'+esc(h.id)+'">Открыть результат</button><button class="smallBtn danger" data-delete-history="'+esc(h.id)+'">Удалить</button></div></div>').join("");
+  $("historyList").innerHTML=entries.map(h=>'<div class="historyItem" data-history-id="'+esc(h.id)+'"><div class="itemName">'+esc(h.oldName)+' → '+esc(h.newName)+'</div><div class="itemMeta">'+new Date(h.createdAt).toLocaleString("ru-RU")+' · '+esc(modeLabel("old"))+': '+h.oldCount+' · '+esc(modeLabel("now"))+': '+h.newCount+' · '+esc(modeLabel("added"))+': '+h.added.length+' · '+esc(modeLabel("removed"))+': '+h.removed.length+'</div><div class="smallActions"><button class="smallBtn" data-open-history="'+esc(h.id)+'">Открыть результат</button><button class="smallBtn danger" data-delete-history="'+esc(h.id)+'">Удалить</button></div></div>').join("");
   document.querySelectorAll("[data-open-history]").forEach(b=>b.onclick=e=>{e.stopPropagation();restoreHistory(b.dataset.openHistory)});
   document.querySelectorAll("[data-delete-history]").forEach(b=>b.onclick=async e=>{e.stopPropagation();await dbDelete("history",b.dataset.deleteHistory);await renderHistory()});
   document.querySelectorAll(".historyItem").forEach(el=>el.onclick=()=>restoreHistory(el.dataset.historyId));
@@ -419,9 +454,9 @@ async function restoreHistory(id){
   added=h.added||[];removed=h.removed||[];current="added";
   $("oldCount").textContent=h.oldCount.toLocaleString("ru-RU");$("newCount").textContent=h.newCount.toLocaleString("ru-RU");
   const diff=h.newCount-h.oldCount;$("totalChange").textContent=(diff>0?"+":"")+diff;
-  $("addedTab").textContent="🟢 Подписался: "+added.length;$("removedTab").textContent="🔴 Отписался: "+removed.length;
+  $("addedTab").textContent="🟢 "+modeLabel("added")+": "+added.length;$("removedTab").textContent="🔴 "+modeLabel("removed")+": "+removed.length;
   $("addedTab").classList.add("active");$("removedTab").classList.remove("active");$("search").value="";
-  $("results").style.display="block";render();closeModal("historyOverlay");window.scrollTo({top:document.querySelector(".results").offsetTop-20,behavior:"smooth"});
+  $("results").style.display="block";render();renderDynamicsChart();closeModal("historyOverlay");window.scrollTo({top:document.querySelector(".results").offsetTop-20,behavior:"smooth"});
 }
 
 
@@ -471,6 +506,7 @@ function setFile(file,nameId,which){
 }
 setupInput("oldFile","oldName","oldDrop","old");
 setupInput("newFile","newName","newDrop","new");
+updateModeUI();
 
 function detectDelimiter(text){
   const first=text.split(/\r?\n/).find(x=>x.trim())||"";
@@ -556,12 +592,12 @@ $("compare").addEventListener("click",async()=>{
     $("newCount").textContent=newMap.size.toLocaleString("ru-RU");
     const diff=newMap.size-oldMap.size;
     $("totalChange").textContent=(diff>0?"+":"")+diff;
-    $("addedTab").textContent="🟢 Подписался: "+added.length;
-    $("removedTab").textContent="🔴 Отписался: "+removed.length;
+    $("addedTab").textContent="🟢 "+modeLabel("added")+": "+added.length;
+    $("removedTab").textContent="🔴 "+modeLabel("removed")+": "+removed.length;
     current="added";$("addedTab").classList.add("active");$("removedTab").classList.remove("active");
     $("results").style.display="block";
     render();
-    try{await dbPut("history",{id:makeId(),createdAt:Date.now(),oldName:oldFile.name,newName:newFile.name,oldCount:oldMap.size,newCount:newMap.size,added:added.slice(),removed:removed.slice()});}catch(e){showError("Сравнение выполнено, но историю сохранить не удалось. Возможно, в браузере закончилось место.");}
+    try{await dbPut("history",{id:makeId(),mode:appMode,createdAt:Date.now(),oldName:oldFile.name,newName:newFile.name,oldCount:oldMap.size,newCount:newMap.size,added:added.slice(),removed:removed.slice()});await renderDynamicsChart();}catch(e){showError("Сравнение выполнено, но историю сохранить не удалось. Возможно, в браузере закончилось место.");}
   }catch(e){showError(e.message||"Не удалось обработать CSV.");}
 });
 $("addedTab").onclick=()=>{current="added";$("addedTab").classList.add("active");$("removedTab").classList.remove("active");render()};
@@ -582,15 +618,40 @@ $("exportPdf").addEventListener("click",()=>{
   ).join("");
   $("pdfExport").innerHTML=
     "<h1>InstaAnalyz — результаты сравнения</h1>"+
-    '<div class="pdfMeta">Было подписок: '+esc($("oldCount").textContent)+
-    " · Сейчас подписок: "+esc($("newCount").textContent)+
+    '<div class="pdfMeta">'+esc(modeLabel("old"))+': '+esc($("oldCount").textContent)+
+    " · "+esc(modeLabel("now"))+": "+esc($("newCount").textContent)+
     " · Новые пользователи: "+added.length+
     " · Отписанные пользователи: "+removed.length+
     " · Дата: "+esc(new Date().toLocaleString("ru-RU"))+"</div>"+
-    "<table><thead><tr><th>Новые пользователи</th><th>Отписанные пользователи</th></tr></thead><tbody>"+rows+"</tbody></table>";
+    "<table><thead><tr><th>"+esc(modeLabel("added"))+" — пользователи</th><th>"+esc(modeLabel("removed"))+" — пользователи</th></tr></thead><tbody>"+rows+"</tbody></table>";
   window.print();
 });
 
+async function renderDynamicsChart(){
+  const host=$("dynamicsChart");if(!host)return;
+  let entries=[];
+  try{entries=(await dbAll("history")).filter(h=>(h.mode||"subscriptions")===appMode).sort((a,b)=>a.createdAt-b.createdAt)}catch(e){}
+  $("chartTitle").textContent=modeLabel("chart");
+  if(!entries.length){host.innerHTML='<div class="chartEmpty">Сравните CSV — график покажет историю количества пользователей. Каждая точка берётся из реальных значений старого и нового файла.</div>';return}
+  const W=900,H=280,L=62,R=24,T=22,B=48,plotW=W-L-R,plotH=H-T-B;
+  const vals=entries.flatMap(e=>[Number(e.oldCount)||0,Number(e.newCount)||0]);
+  let min=Math.min(...vals),max=Math.max(...vals);if(min===max){min=Math.max(0,min-Math.max(1,Math.round(min*.08)));max=max+Math.max(1,Math.round(max*.08))}
+  const pad=(max-min)*.12;min=Math.max(0,min-pad);max+=pad;
+  const x=i=>entries.length===1?L+plotW/2:L+i*plotW/(entries.length-1);
+  const y=v=>T+(max-v)/(max-min)*plotH;
+  const smooth=pts=>pts.length<2?pts.map(p=>p.join(",")).join(" "):pts.map((p,i)=>{if(i===0)return "M "+p[0]+" "+p[1];const prev=pts[i-1],mid=(prev[0]+p[0])/2;return "C "+mid+" "+prev[1]+", "+mid+" "+p[1]+", "+p[0]+" "+p[1]}).join(" ");
+  const oldPts=entries.map((e,i)=>[x(i),y(Number(e.oldCount)||0)]),newPts=entries.map((e,i)=>[x(i),y(Number(e.newCount)||0)]);
+  const ticks=Array.from({length:5},(_,i)=>min+(max-min)*i/4);
+  const grid=ticks.map(v=>'<line x1="'+L+'" y1="'+y(v)+'" x2="'+(W-R)+'" y2="'+y(v)+'" stroke="#283650" stroke-width="1"/><text x="'+(L-12)+'" y="'+(y(v)+4)+'" text-anchor="end" fill="#8190ad" font-size="11">'+Math.round(v).toLocaleString("ru-RU")+'</text>').join("");
+  const dots=(pts,key,color)=>pts.map((p,i)=>'<circle cx="'+p[0]+'" cy="'+p[1]+'" r="'+(entries.length>22?2.5:4)+'" fill="'+color+'" stroke="#0c1425" stroke-width="2"><title>'+new Date(entries[i].createdAt).toLocaleString("ru-RU")+' · '+(key==="old"?"Было":"Сейчас")+': '+(key==="old"?entries[i].oldCount:entries[i].newCount)+'</title></circle>').join("");
+  const xlabels=entries.map((e,i)=>{if(entries.length>8&&i%Math.ceil(entries.length/6)!==0&&i!==entries.length-1)return "";return '<text x="'+x(i)+'" y="'+(H-18)+'" text-anchor="middle" fill="#8190ad" font-size="10">'+new Date(e.createdAt).toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit"})+'</text>'}).join("");
+  host.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="График количества пользователей в старых и новых CSV">'+
+    '<defs><linearGradient id="newArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#42dfb0" stop-opacity=".22"/><stop offset="100%" stop-color="#42dfb0" stop-opacity="0"/></linearGradient><filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>'+
+    grid+'<path d="'+smooth(newPts)+' L '+newPts[newPts.length-1][0]+' '+(T+plotH)+' L '+newPts[0][0]+' '+(T+plotH)+' Z" fill="url(#newArea)"/>'+
+    '<path d="'+smooth(oldPts)+'" fill="none" stroke="#8b7cff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/>'+
+    '<path d="'+smooth(newPts)+'" fill="none" stroke="#42dfb0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>'+
+    dots(oldPts,"old","#8b7cff")+dots(newPts,"new","#42dfb0")+xlabels+'</svg>';
+}
 function instagramUrl(value){
   const username=String(value??"").trim().replace(/^@/,"");
   if(!/^[A-Za-z0-9._]{1,30}$/.test(username))return "";

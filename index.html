@@ -345,8 +345,8 @@ h1{font-size:clamp(30px,4vw,43px);font-weight:800;letter-spacing:-1.5px;line-hei
     </div>
 
     <div class="list">
-      <input class="search" id="search" placeholder="Поиск по ID, username или имени...">
-      <div class="row header"><div>№</div><div>ID</div><div>Имя</div><div>Username</div></div>
+      <input class="search" id="search" placeholder="Поиск по username...">
+      <div class="row header" style="grid-template-columns:1fr"><div>@username</div></div>
       <div id="listBody"></div>
     </div>
 
@@ -609,39 +609,23 @@ $("search").addEventListener("input",render);
 
 $("exportPdf").addEventListener("click",()=>{
   if(!window.pdfMake){showError("Не удалось загрузить модуль создания PDF. Проверьте подключение к интернету и обновите страницу.");return}
-  const maxRows=Math.max(added.length,removed.length,1);
-  const userLabel=u=>{
-    const parts=[];
-    if(u.username)parts.push("@"+u.username);
-    if(u.name)parts.push(u.name);
-    if(u.id)parts.push("ID: "+u.id);
-    return parts.join(" · ")||"—";
-  };
-  const body=[
-    [{text:modeLabel("added")+" — пользователи",style:"tableHeader"},{text:modeLabel("removed")+" — пользователи",style:"tableHeader"}]
-  ];
-  for(let i=0;i<maxRows;i++){
-    body.push([
-      added[i]?userLabel(added[i]):"",
-      removed[i]?userLabel(removed[i]):""
-    ]);
-  }
+  const newUsers=added.filter(u=>String(u.username||"").trim()).map(u=>"@"+String(u.username).trim().replace(/^@/,""));
+  const removedUsers=removed.filter(u=>String(u.username||"").trim()).map(u=>"@"+String(u.username).trim().replace(/^@/,""));
+  const maxRows=Math.max(newUsers.length,removedUsers.length,1);
+  const title=appMode==="subscriptions"?"Последние подписки и отписки":"Последние подписавшиеся и отписавшиеся";
+  const leftTitle=appMode==="subscriptions"?"Подписки":"Подписавшиеся";
+  const rightTitle=appMode==="subscriptions"?"Отписки":"Отписавшиеся";
+  const body=[[{text:leftTitle,style:"tableHeader"},{text:rightTitle,style:"tableHeader"}]];
+  for(let i=0;i<maxRows;i++)body.push([newUsers[i]||"",removedUsers[i]||""]);
   const date=new Date();
   const stamp=date.getFullYear()+"-"+String(date.getMonth()+1).padStart(2,"0")+"-"+String(date.getDate()).padStart(2,"0");
   const doc={
     pageOrientation:"landscape",
     pageMargins:[34,38,34,38],
-    info:{title:"InstaAnalyz — результаты сравнения",author:"InstaAnalyz"},
-    defaultStyle:{font:"Roboto",fontSize:9,color:"#182033"},
+    info:{title:title,author:"InstaAnalyz"},
+    defaultStyle:{font:"Roboto",fontSize:10,color:"#182033"},
     content:[
-      {text:"InstaAnalyz",fontSize:22,bold:true,color:"#6657d9",margin:[0,0,0,5]},
-      {text:"Результаты сравнения",fontSize:14,bold:true,margin:[0,0,0,12]},
-      {columns:[
-        {text:modeLabel("old")+": "+$("oldCount").textContent,bold:true},
-        {text:modeLabel("now")+": "+$("newCount").textContent,bold:true},
-        {text:"Новые: "+added.length+"   ·   Отписанные: "+removed.length},
-        {text:date.toLocaleString("ru-RU"),alignment:"right"}
-      ],columnGap:12,margin:[0,0,0,16]},
+      {text:title,fontSize:18,bold:true,color:"#30286e",margin:[0,0,0,16]},
       {table:{headerRows:1,widths:["*","*"],body},layout:{
         fillColor:(rowIndex)=>rowIndex===0?"#e9e7ff":(rowIndex%2===0?"#f5f7fb":null),
         hLineColor:() => "#d7ddeb",
@@ -657,14 +641,18 @@ $("exportPdf").addEventListener("click",()=>{
 function parseFilenameDates(name){
   const s=String(name||"");
   const found=[];
-  const add=(y,m,d)=>{
-    const date=new Date(Number(y),Number(m)-1,Number(d));
-    if(date.getFullYear()===Number(y)&&date.getMonth()===Number(m)-1&&date.getDate()===Number(d)&&!found.some(x=>x.getTime()===date.getTime()))found.push(date);
+  const add=(year,month,day)=>{
+    let y=Number(year);
+    if(String(year).length===2)y+=2000;
+    const m=Number(month),d=Number(day);
+    const date=new Date(y,m-1,d);
+    // Reject impossible calendar dates instead of silently rolling them into another month.
+    if(date.getFullYear()===y&&date.getMonth()===m-1&&date.getDate()===d&&!found.some(x=>x.getTime()===date.getTime()))found.push(date);
   };
   let match;
-  const dmy=/(\d{1,2})[._/-](\d{1,2})[._/-](\d{4})/g;
+  const dmy=/(\d{1,2})[._/-](\d{1,2})[._/-](\d{2}|\d{4})(?!\d)/g;
   while((match=dmy.exec(s)))add(match[3],match[2],match[1]);
-  const ymd=/(\d{4})[._/-](\d{1,2})[._/-](\d{1,2})/g;
+  const ymd=/(\d{4})[._/-](\d{1,2})[._/-](\d{1,2})(?!\d)/g;
   while((match=ymd.exec(s)))add(match[1],match[2],match[3]);
   found.sort((a,b)=>a-b);
   return found.length?{start:found[0],end:found[found.length-1]}:null;
@@ -737,25 +725,23 @@ function instagramUrl(value){
 }
 function render(){
   const data=current==="added"?added:removed;
-  const q=norm($("search").value);
-  const filtered=data.filter(u=>
-    norm(u.id).includes(q)||norm(u.username).includes(q)||norm(u.name).includes(q)
-  );
+  const q=norm($("search").value.replace(/^@/,""));
+  const filtered=data.filter(u=>norm(u.username).replace(/^@/,"").includes(q));
   if(!filtered.length){
     $("listBody").innerHTML='<div class="empty">'+(data.length?"Ничего не найдено.":"Различий не обнаружено.")+"</div>";
     return;
   }
-  $("listBody").innerHTML=filtered.map((u,i)=>{
-    const url=instagramUrl(u.username);
+  $("listBody").innerHTML=filtered.map(u=>{
+    const username=String(u.username||"").trim().replace(/^@/,"");
+    if(!username)return "";
+    const url=instagramUrl(username);
     const tag=url?"a":"div";
-    const linkAttrs=url?' href="'+esc(url)+'" target="_blank" rel="noopener noreferrer" aria-label="Открыть Instagram профиля '+esc(u.username)+'"':"";
-    return '<'+tag+' class="row profileRow"'+linkAttrs+'>'+
-      '<div class="mono">'+(i+1)+'</div>'+
-      '<div class="mono">'+esc(u.id)+'</div>'+
-      '<div>'+ (esc(u.name)||"—")+'</div>'+
-      '<div class="username">'+(esc(u.username)||"—")+'</div>'+
+    const linkAttrs=url?' href="'+esc(url)+'" target="_blank" rel="noopener noreferrer" aria-label="Открыть Instagram профиля '+esc(username)+'"':"";
+    return '<'+tag+' class="row profileRow" style="grid-template-columns:1fr"'+linkAttrs+'>'+
+      '<div class="username">@'+esc(username)+'</div>'+
     '</'+tag+'>';
-  }).join("");
+  }).filter(Boolean).join("");
+  if(!$("listBody").innerHTML)$("listBody").innerHTML='<div class="empty">В найденных пользователях нет username.</div>';
 }
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
 function showError(t){$("error").textContent=t;$("error").style.display="block"}

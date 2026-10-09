@@ -304,17 +304,33 @@ function setupInput(inputId,nameId,dropId,which){
   input.addEventListener("change",()=>{
     if(input.files[0]) setFile(input.files[0],nameId,which);
   });
-  ["dragenter","dragover"].forEach(e=>drop.addEventListener(e,ev=>{
-    ev.preventDefault();drop.classList.add("drag");
-  }));
-  ["dragleave","drop"].forEach(e=>drop.addEventListener(e,ev=>{
-    ev.preventDefault();drop.classList.remove("drag");
-  }));
-  drop.addEventListener("drop",ev=>{
-    const f=ev.dataTransfer.files[0];
-    if(f){setFile(f,nameId,which);}
+  // Accept drops anywhere on the upload card, not only on its label.
+  const zones=[drop,drop.closest(".card")].filter(Boolean);
+  zones.forEach(zone=>{
+    ["dragenter","dragover"].forEach(e=>zone.addEventListener(e,ev=>{
+      ev.preventDefault();
+      if(ev.dataTransfer) ev.dataTransfer.dropEffect="copy";
+      drop.classList.add("drag");
+    }));
+    zone.addEventListener("dragleave",ev=>{
+      if(!zone.contains(ev.relatedTarget)) drop.classList.remove("drag");
+    });
+    zone.addEventListener("drop",ev=>{
+      ev.preventDefault();
+      ev.stopPropagation();
+      drop.classList.remove("drag");
+      const f=ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0];
+      if(f) setFile(f,nameId,which);
+    });
   });
 }
+// Do not let the browser navigate to a CSV dragged onto the page.
+document.addEventListener("dragover",ev=>{
+  if(ev.dataTransfer && Array.from(ev.dataTransfer.types||[]).includes("Files")) ev.preventDefault();
+});
+document.addEventListener("drop",ev=>{
+  if(ev.dataTransfer && Array.from(ev.dataTransfer.types||[]).includes("Files")) ev.preventDefault();
+});
 function setFile(file,nameId,which){
   if(!file.name.toLowerCase().endsWith(".csv")){
     showError("Нужен файл в формате CSV.");return;

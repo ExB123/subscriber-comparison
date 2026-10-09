@@ -217,6 +217,7 @@ input[type=file]{display:none}
 </div>
 
 <script>
+const $=id=>document.getElementById(id);
 
 let oldFile=null,newFile=null,added=[],removed=[],current="added";
 let savedFiles=[],selectedSavedFile=null,currentOldUsers=[],currentNewUsers=[];
@@ -297,7 +298,7 @@ async function restoreHistory(id){
 }
 
 
-const $=id=>document.getElementById(id);
+
 
 function setupInput(inputId,nameId,dropId,which){
   const input=$(inputId), drop=$(dropId);

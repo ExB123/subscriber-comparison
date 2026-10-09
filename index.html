@@ -361,6 +361,8 @@ h1{font-size:clamp(30px,4vw,43px);font-weight:800;letter-spacing:-1.5px;line-hei
 
 <div id="pdfExport" aria-hidden="true"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/pdfmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/vfs_fonts.js"></script>
 <script>
 const $=id=>document.getElementById(id);
 
@@ -606,6 +608,7 @@ $("removedTab").onclick=()=>{current="removed";$("removedTab").classList.add("ac
 $("search").addEventListener("input",render);
 
 $("exportPdf").addEventListener("click",()=>{
+  if(!window.pdfMake){showError("Не удалось загрузить модуль создания PDF. Проверьте подключение к интернету и обновите страницу.");return}
   const maxRows=Math.max(added.length,removed.length,1);
   const userLabel=u=>{
     const parts=[];
@@ -614,18 +617,41 @@ $("exportPdf").addEventListener("click",()=>{
     if(u.id)parts.push("ID: "+u.id);
     return parts.join(" · ")||"—";
   };
-  const rows=Array.from({length:maxRows},(_,i)=>
-    "<tr><td>"+esc(added[i]?userLabel(added[i]):"")+"</td><td>"+esc(removed[i]?userLabel(removed[i]):"")+"</td></tr>"
-  ).join("");
-  $("pdfExport").innerHTML=
-    "<h1>InstaAnalyz — результаты сравнения</h1>"+
-    '<div class="pdfMeta">'+esc(modeLabel("old"))+': '+esc($("oldCount").textContent)+
-    " · "+esc(modeLabel("now"))+": "+esc($("newCount").textContent)+
-    " · Новые пользователи: "+added.length+
-    " · Отписанные пользователи: "+removed.length+
-    " · Дата: "+esc(new Date().toLocaleString("ru-RU"))+"</div>"+
-    "<table><thead><tr><th>"+esc(modeLabel("added"))+" — пользователи</th><th>"+esc(modeLabel("removed"))+" — пользователи</th></tr></thead><tbody>"+rows+"</tbody></table>";
-  window.print();
+  const body=[
+    [{text:modeLabel("added")+" — пользователи",style:"tableHeader"},{text:modeLabel("removed")+" — пользователи",style:"tableHeader"}]
+  ];
+  for(let i=0;i<maxRows;i++){
+    body.push([
+      added[i]?userLabel(added[i]):"",
+      removed[i]?userLabel(removed[i]):""
+    ]);
+  }
+  const date=new Date();
+  const stamp=date.getFullYear()+"-"+String(date.getMonth()+1).padStart(2,"0")+"-"+String(date.getDate()).padStart(2,"0");
+  const doc={
+    pageOrientation:"landscape",
+    pageMargins:[34,38,34,38],
+    info:{title:"InstaAnalyz — результаты сравнения",author:"InstaAnalyz"},
+    defaultStyle:{font:"Roboto",fontSize:9,color:"#182033"},
+    content:[
+      {text:"InstaAnalyz",fontSize:22,bold:true,color:"#6657d9",margin:[0,0,0,5]},
+      {text:"Результаты сравнения",fontSize:14,bold:true,margin:[0,0,0,12]},
+      {columns:[
+        {text:modeLabel("old")+": "+$("oldCount").textContent,bold:true},
+        {text:modeLabel("now")+": "+$("newCount").textContent,bold:true},
+        {text:"Новые: "+added.length+"   ·   Отписанные: "+removed.length},
+        {text:date.toLocaleString("ru-RU"),alignment:"right"}
+      ],columnGap:12,margin:[0,0,0,16]},
+      {table:{headerRows:1,widths:["*","*"],body},layout:{
+        fillColor:(rowIndex)=>rowIndex===0?"#e9e7ff":(rowIndex%2===0?"#f5f7fb":null),
+        hLineColor:() => "#d7ddeb",
+        vLineColor:() => "#d7ddeb",
+        paddingLeft:() => 8,paddingRight:() => 8,paddingTop:() => 6,paddingBottom:() => 6
+      }}
+    ],
+    styles:{tableHeader:{bold:true,color:"#30286e",fontSize:10}}
+  };
+  window.pdfMake.createPdf(doc).download("InstaAnalyz-"+appMode+"-"+stamp+".pdf");
 });
 
 async function renderDynamicsChart(){

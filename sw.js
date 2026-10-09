@@ -1,4 +1,4 @@
-const CACHE = "subscriber-compare-v8";
+const CACHE = "subscriber-compare-v9";
 const ASSETS = [
   "./",
   "./index.html",

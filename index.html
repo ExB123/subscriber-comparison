@@ -231,6 +231,18 @@ h1{font-size:clamp(30px,4vw,43px);font-weight:800;letter-spacing:-1.5px;line-hei
   .modal{border-radius:18px;padding:15px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
+#pdfExport{display:none}
+@media print{
+  body{background:#fff!important;color:#111!important}
+  body>*:not(#pdfExport){display:none!important}
+  #pdfExport{display:block!important;padding:0!important;margin:0!important;font:10pt Arial,sans-serif;color:#111!important}
+  #pdfExport h1{font-size:20pt;color:#111!important;margin:0 0 8pt}
+  #pdfExport .pdfMeta{font-size:9pt;color:#444;margin-bottom:14pt}
+  #pdfExport table{width:100%;border-collapse:collapse;table-layout:fixed}
+  #pdfExport th,#pdfExport td{border:1px solid #bbb;padding:6pt;vertical-align:top;overflow-wrap:anywhere}
+  #pdfExport th{background:#eee!important;color:#111!important;text-align:left}
+  #pdfExport td{height:20pt}
+}
 
 </style>
 
@@ -324,10 +336,12 @@ h1{font-size:clamp(30px,4vw,43px);font-weight:800;letter-spacing:-1.5px;line-hei
       <div id="listBody"></div>
     </div>
 
-    <div class="note">
-    </div>
+    <div class="note"></div>
+    <button class="btn" id="exportPdf" style="margin-top:18px">📄 Скачать PDF</button>
   </div>
 </div>
+
+<div id="pdfExport" aria-hidden="true"></div>
 
 <script>
 const $=id=>document.getElementById(id);
@@ -553,6 +567,29 @@ $("compare").addEventListener("click",async()=>{
 $("addedTab").onclick=()=>{current="added";$("addedTab").classList.add("active");$("removedTab").classList.remove("active");render()};
 $("removedTab").onclick=()=>{current="removed";$("removedTab").classList.add("active");$("addedTab").classList.remove("active");render()};
 $("search").addEventListener("input",render);
+
+$("exportPdf").addEventListener("click",()=>{
+  const maxRows=Math.max(added.length,removed.length,1);
+  const userLabel=u=>{
+    const parts=[];
+    if(u.username)parts.push("@"+u.username);
+    if(u.name)parts.push(u.name);
+    if(u.id)parts.push("ID: "+u.id);
+    return parts.join(" · ")||"—";
+  };
+  const rows=Array.from({length:maxRows},(_,i)=>
+    "<tr><td>"+esc(added[i]?userLabel(added[i]):"")+"</td><td>"+esc(removed[i]?userLabel(removed[i]):"")+"</td></tr>"
+  ).join("");
+  $("pdfExport").innerHTML=
+    "<h1>InstaAnalyz — результаты сравнения</h1>"+
+    '<div class="pdfMeta">Было подписок: '+esc($("oldCount").textContent)+
+    " · Сейчас подписок: "+esc($("newCount").textContent)+
+    " · Новые пользователи: "+added.length+
+    " · Отписанные пользователи: "+removed.length+
+    " · Дата: "+esc(new Date().toLocaleString("ru-RU"))+"</div>"+
+    "<table><thead><tr><th>Новые пользователи</th><th>Отписанные пользователи</th></tr></thead><tbody>"+rows+"</tbody></table>";
+  window.print();
+});
 
 function instagramUrl(value){
   const username=String(value??"").trim().replace(/^@/,"");
